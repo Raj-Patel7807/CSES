@@ -1,0 +1,1 @@
+{"name":"Local: coinPiles","url":"d:\\Code_PlayGround\\C++\\CSES\\Problems\\coinPiles.cpp","tests":[{"id":1736415296438,"input":"3\n2 1\n2 2\n3 3","output":"YES\nNO\nYES"}],"interactive":false,"memoryLimit":1024,"timeLimit":3000,"srcPath":"d:\\Code_PlayGround\\C++\\CSES\\Problems\\coinPiles.cpp","group":"local","local":true}
