@@ -14,22 +14,43 @@
 using namespace std;
 using namespace __gnu_pbds;
 
+struct custom_hash { //to avoid TLE due to collision in unordered_map and unordered_set;
+    static inline const uint64_t FIXED_RANDOM = std::chrono::steady_clock::now().time_since_epoch().count();
+    static uint64_t splitmix64(uint64_t x) {
+        x += 0x9e3779b97f4a7c15ULL;
+        x = (x ^ (x >> 30)) * 0xbf58476d1ce4e5b9ULL;
+        x = (x ^ (x >> 27)) * 0x94d049bb133111ebULL;
+        return x ^ (x >> 31);
+    }
+    size_t operator()(uint64_t x) const {
+        return splitmix64(x + FIXED_RANDOM);
+    }
+    template <typename T1, typename T2>
+    size_t operator()(const std::pair<T1, T2>& p) const {
+        size_t h1 = operator()(static_cast<uint64_t>(p.first));
+        size_t h2 = operator()(static_cast<uint64_t>(p.second));
+        return h1 ^ (h2 << 1);
+    }
+};
+
 using ll = long long int;
 using ull = unsigned long long int;
 using ld = long double;
 #define int ll
 #define double ld
-template <typename T, typename V> using pr = pair<T, V>;
-template <typename T> using vc = vector<T>;
-template <typename T, typename V> using umap = unordered_map<T, V>;
-template <typename T> using uset = unordered_set<T>;
-template <typename T> using pqmax = priority_queue<T>;
-template <typename T> using pqmin = priority_queue<T, vector<T>, greater<T>>;
-template <typename T> using idset = tree<T, null_type,less<T>, rb_tree_tag, tree_order_statistics_node_update>;
-// For `idset`:
-//     find_by_order(k) - O(log n) - Find the k-th smallest element (0-based index);
-//     order_of(value) - O(log n) - Find the index of a value in the sorted set;
-//     Can find the k-th smallest element, or get the position of a value in sorted order;
+template <class T1, class T2> using pr = pair<T1, T2>;
+template <class T> using vc = vector<T>;
+template <class T1, class T2> using umap = unordered_map<T1, T2, custom_hash>;
+template <class T> using uset = unordered_set<T, custom_hash>;
+template <class T> using pqmax = priority_queue<T>;
+template <class T> using pqmin = priority_queue<T, vector<T>, greater<T>>;
+template <class T>
+using idset = tree<T, null_type,less<T>, rb_tree_tag, tree_order_statistics_node_update>;
+template<class key, class value, class cmp = std::less<key>>
+using idmap = tree<key, value, cmp, rb_tree_tag, tree_order_statistics_node_update>;
+// For `idset` & `idmap`:
+//     .find_by_order(k)  returns iterator to kth element starting from 0;
+//     .order_of_key(k) returns count of elements strictly smaller than k;
 
 #define endl '\n'
 #define ln cout << '\n';
@@ -62,6 +83,7 @@ template <typename... T> inline void OUTPUT(bool F, T&&... args) { ((cout << arg
 #define VIN(T, name, n) vector<T> name(n); for(auto& x : name) cin >> x;
 #define VVIN(T, name, n, m) vector<vector<T>> name(n, vector<T>(m)); FOR(i, n) FOR(j, m) cin >> name[i][j];
 #define VOUT(a) for(auto x : a) { cout << x << ' '; } cout << '\n';
+#define VPOUT(a) for(auto x : a) { cout << x.first << ' ' << x.second << '\n'; }
 // rotate(v.begin(), v.end()-r, v.end()); - Rotate vector r times right;
 // rotate(v.begin(), v.begin()+r, v.end()); - Rotate vector r times left;
 
@@ -85,7 +107,7 @@ void prime(ll n) {
     for(ll i=2; i<=n; i++) { if(isPRIME[i]) { for(ll j=i*i; j<=n; j+=i) { isPRIME[j] = false; } } }
     for(ll i=2; i<=n; i++) { if(id < MAX && isPRIME[i]) { PRIME[id] = i; id++; } }
 }
-vector<ll> getPrimeDivisors(ll n){
+vector<ll> getPrimeDivisors(ll n) {
     vector<ll> primeDivisors;
     for(ll i=2; i*i<=n; i++) { while(n % i == 0) { primeDivisors.push_back(i); n /= i; } }
     if(n > 1) { primeDivisors.push_back(n); } return primeDivisors;
@@ -112,27 +134,40 @@ inline void factorial(ll n, ll mod = MOD) {
     invFACT[n] = modInv(FACT[n], mod); for(ll i=n-1; i>0; i--) { invFACT[i] = (invFACT[i+1] * (i+1)) % mod; }
 }
 inline ll nCr(ll n, ll r, ll mod = MOD) {
-    if(r > n) return 0; factorial(n, mod);
+    if(r > n) return 0;
     return (FACT[n] * ((invFACT[r] * invFACT[n-r]) % mod)) % mod;
 }
 class DSU {
 private :
-    vector<ll> parent, size, edge;
+    vector<ll> parent, size, edge, rank, dist;
 public :
     DSU(ll n) {
         parent.resize(n + 1); size.assign(n + 1, 1);
-        edge.assign(n+1, 0);
+        rank.assign(n + 1, 0); edge.assign(n + 1, 0);
+        dist.assign(n + 1, 0);
         iota(parent.begin(), parent.end(), 0);
     }
     ll find(ll x) {
-        if(parent[x] == x) return x;
-        return parent[x] = find(parent[x]);
+        if(x != parent[x]) {
+            ll root = find(parent[x]);
+            dist[x] += dist[parent[x]];
+            parent[x] = root;
+        } return parent[x];
     }
-    void unite(ll x, ll y) {
+    void unitebysize(ll x, ll y) {
         x = find(x), y = find(y);
         if(x != y) {
             if(size[x] < size[y]) { swap(x, y); }
             parent[y] = x; size[x] += size[y];
+            edge[x] += edge[y] + 1; dist[y] = 1;
+        } else { edge[x]++; }
+    }
+    void unitebyrank(ll x, ll y) {
+        x = find(x), y = find(y);
+        if(x != y) {
+            if(size[x] < size[y]) { swap(x, y); }
+            parent[y] = x; dist[y] = 1;
+            if(rank[x] == rank[y]) rank[x]++;
             edge[x] += edge[y] + 1;
         } else { edge[x]++; }
     }
@@ -167,12 +202,12 @@ inline ll computeXOR(ll n) { if(n%4==0) return n; if(n%4==1) return 1; if(n%4==2
 inline ll cntSetBit(ll n) { return (__builtin_popcountll(n)); }
 inline ll msbPos(ll n) { if(n == 0) { return -1; } return (63 - (__builtin_clzll(n))); }
 inline ll getBit(ll n, ll pos) { return ((n >> pos) & 1); }
-inline ll setBit(ll n, ll pos) { return (n | (1 << pos)); }
-inline ll clearBit(ll n, ll pos) { return (n & (~(1 << pos))); }
-inline ll toggleBit(ll n, ll pos) { return (n ^ (1 << pos)); }
-inline ll updateBit(ll n, ll pos, ll bit) { return (n & (~(1 << pos)) | (bit << pos)); }
+inline ll setBit(ll n, ll pos) { return (n | (1LL << pos)); }
+inline ll clearBit(ll n, ll pos) { return (n & (~(1LL << pos))); }
+inline ll toggleBit(ll n, ll pos) { return (n ^ (1LL << pos)); }
+inline ll updateBit(ll n, ll pos, ll bit) { return (n & (~(1LL << pos)) | (bit << pos)); }
 inline ll TT(bool flag = false) { ll tt = 1; if(flag) { cin >> tt; } return tt; }
-inline void SETUP_IO(bool FILE_IO = true) {
+inline void SETUP_IO(bool FILE_IO = false) {
     ios_base :: sync_with_stdio(false); cin.tie(nullptr); cout.tie(nullptr);
     if(FILE_IO) {
         #ifndef ONLINE_JUDGE
@@ -186,20 +221,13 @@ inline void SETUP_IO(bool FILE_IO = true) {
 //==========^==========<<   C O D E   B Y   R A J  P A T E L   >>==========^==========//
 
 void Raj_Patel_7807(ll tt) {
-    IN(ll, n, x); VIN(ll, a, n);
-    vc<ll> dp(x+1, -1);
-
-    function<ll(ll)> count = [&](ll c) {
-        if(!c) return dp[c] = 0;
-        if(dp[c] != -1) return dp[c];
-        ll cnt = INF;
-        FORE(i, a) {
-            if(c - i >= 0) cnt = min(cnt, count(c-i)+1);
-        } return dp[c] = cnt;
-    };
-
-    ll ans = count(x);
-    OUT(ans == INF ? -1 : ans);
+    IN(ll, n, k); VIN(ll, a, n);
+    vc<ll> dp(k+1);
+    dp[0] = 1;
+    FOR(n) FOR(j, a[i], k+1) {
+        dp[j] += dp[j - a[i]];
+        if(dp[j] >= MOD) dp[j] %= MOD;
+    } OUT(dp[k]);
 }
 
 signed main() {
