@@ -229,7 +229,7 @@ void Raj_Patel_7807(ll tt) {
         FOR(j, n) if(i - a[j] >= 0) {
             dp[i] = min(dp[i], dp[i - a[j]]+1);
         }
-    }
+    }   
     if(dp[k] == INF) dp[k] = -1;
     OUT(dp[k]);
 }
